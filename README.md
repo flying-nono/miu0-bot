@@ -4,4 +4,5 @@
 启动命令：nb run  或  python bot.py
 
 成功启动后，将会在54321端口启动服务
-可在.end.dev里配置
+
+可在.env.dev里配置
