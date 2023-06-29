@@ -52,21 +52,3 @@ async def get_b50(qq:str=Form(''),username:str=Form('')):
 
     return FileResponse(b50_img_path)
 
-
-@app.post("/b50/trend")
-async def get_maitrend(qq:str=Form(''),username:str=Form('')):
-    if qq != '':
-        payload = {"qq":qq,'b50':True}
-        b50_json, success = await _get_b50_json(payload)
-        if success == 400:
-            return "未找到此玩家，请确保此玩家的用户名和查分器中的用户名相同。"
-        elif success == 403:
-            return "该用户禁止了其他人获取数据。"
-        username = b50_json["username"]
-    else:
-        pass
-
-    userinfo = UserInfo.find_user(username)
-    if userinfo.isnewuser:
-        return "bot的数据库中没有该玩家，请多用bot查几次b50吧"
-

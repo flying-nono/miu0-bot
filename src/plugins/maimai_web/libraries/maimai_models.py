@@ -1,4 +1,9 @@
+import json
+import time
+
 from typing import List, Dict
+
+from ..config import plugin_config
 
 
 class ChartFilter:
@@ -163,4 +168,81 @@ class BestList:
 
     def pop(self):
         del self.data[-1]
+
+
+class UserInfo:
+    def __init__(self, username:str, qq:str, rating_trend:Dict, frame_id:str, score_type:str, times:int, data:List[Dict], isnewuser:bool):
+        self.username = username
+        self.qq = qq
+        self.rating_trend = rating_trend
+        self.frame_id = frame_id
+        self.score_type = score_type
+        self.times = times
+        self.data = data
+        self.isnewuser = isnewuser
+
+    def set_qq(self, qq:str):
+        self.qq = qq
+
+    def set_frame_id(self, frame_id:str):
+        self.frame_id = frame_id
+
+    def set_score_type(self, score_type:str):
+        self.score_type = score_type
+
+    def add_rating(self, rating:int):
+        if len(self.rating_trend['date']) == 0 or self.rating_trend['rating'][-1] != rating:
+            self.rating_trend['date'].append(int(time.time()))
+            self.rating_trend['rating'].append(rating)
+
+    def save_user(self):
+        newuser = True
+        for user in self.data:
+            if user['username'] == self.username:
+                newuser = False
+                user['qq'] = self.qq
+                user["rating_trend"] = self.rating_trend
+                user["frame_id"] = self.frame_id
+                user['score_type'] = self.score_type
+                user['times'] = self.times + 1
+        if newuser:
+            userinfo = {}
+            userinfo['username'] = self.username
+            userinfo['qq'] = self.qq
+            userinfo["rating_trend"] = self.rating_trend
+            userinfo["frame_id"] = self.frame_id
+            userinfo['score_type'] = self.score_type
+            userinfo['times'] = 1
+            self.data.append(userinfo)
+        with open(plugin_config.plugin_dir + '/static/user_info.json', 'w', encoding='utf-8') as r:
+            json.dump(self.data, r, indent=4, ensure_ascii=False)
+    
+    @classmethod
+    def find_user(cls, username:str):
+        with open(plugin_config.plugin_dir + '/static/user_info.json', 'r', encoding='utf-8') as f:
+            json1: List[Dict] = json.load(f)
+
+            for user in json1:
+                if user['username'] == username:
+                    return cls(
+                        username = user["username"],
+                        qq = user["qq"],
+                        rating_trend = user["rating_trend"],
+                        frame_id = user["frame_id"],
+                        score_type = user["score_type"],
+                        times = user["times"],
+                        data = json1,
+                        isnewuser = False
+                    )
+            # 未找到，返回新用户默认值
+            return cls(
+                username = username,
+                qq = "",
+                rating_trend = {"date":[], "rating":[]},
+                frame_id = "209507",
+                score_type = "TTR",
+                times = 0,
+                data = json1,
+                isnewuser = True
+            )
 

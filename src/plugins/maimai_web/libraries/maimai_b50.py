@@ -1,26 +1,24 @@
 from PIL import Image, ImageFilter, ImageDraw, ImageFont
 from typing import Dict, List
 from io import BytesIO
-from nonebot import get_driver
 
 import os
-import random
-import time
+
 
 from .maimai_api import _get_b50_json
-from .maimai_models import ChartInfo, BestList
+from .maimai_models import ChartInfo, BestList, UserInfo
 
-from ..config import Config
+from ..config import plugin_config
 
-plugin_config = Config.parse_obj(get_driver().config)
-
+userConfigPath = plugin_config.plugin_dir + '/static/user_info.json'
 
 class DrawBest:
-    def __init__(self, sdBest:BestList, dxBest:BestList, username:str):
-        random.seed(time.time())
+    def __init__(self, sdBest:BestList, dxBest:BestList, name:str, username:str):
         self.sdBest = sdBest
         self.dxBest = dxBest
-        self.username = username
+        self.name = name # 用于显示b50昵称
+        self.username = username # 用于查找用户配置信息
+        self.userinfo = UserInfo.find_user(self.username)
         self.sdRating = 0
         self.dxRating = 0
         for sd in sdBest:
@@ -28,13 +26,15 @@ class DrawBest:
         for dx in dxBest:
             self.dxRating += dx.ra
         self.playerRating = self.sdRating + self.dxRating
+        self.userinfo.add_rating(self.playerRating)
         self.pic_dir = plugin_config.plugin_dir+'/static/mai/pic/'
         self.cover_dir = plugin_config.plugin_dir+'/static/mai/cover/'
         self.frame_dir = plugin_config.plugin_dir+'/static/mai/frame/'
         self.b50_img = Image.open(self.pic_dir+"b50_bg.png").convert("RGBA") # size=(2200, 2400)
         self.frameList = ["209507","306103","200501","309213","100501","105501","105601","159502","200101","250717","306104"]
         # self.frame_img = Image.open(self.frame_dir+"UI_Frame_209507.png").convert("RGBA") # size=(1080, 452)
-        self.frame_img = Image.open(self.frame_dir+f"UI_Frame_{random.choice(self.frameList)}.png").convert("RGBA")
+        # self.frame_img = Image.open(self.frame_dir+f"UI_Frame_{random.choice(self.frameList)}.png").convert("RGBA")
+        self.frame_img = Image.open(self.frame_dir+f"UI_Frame_{self.userinfo.frame_id}.png").convert("RGBA")
         self.img:Image.Image
         self.border = (110, 80)
         self.itemsize = (367, 202)
@@ -91,8 +91,12 @@ class DrawBest:
         font = ImageFont.truetype(titleFontName, 40, encoding='utf-8')
         tempDraw.text((15, self.itemsize[1]*2//4 + 5 ), f'{"%.4f" % chartInfo.achievement}%', 'white', font)
 
-        rankImg = Image.open(self.pic_dir + f'UI_TTR_Rank_{rankPic[chartInfo.scoreId]}.png').convert('RGBA')
-        rankImg = self._resizePic(rankImg, 0.4)
+        # rankImg = Image.open(self.pic_dir + f'UI_TTR_Rank_{rankPic[chartInfo.scoreId]}.png').convert('RGBA')
+        rankImg = Image.open(self.pic_dir + f'UI_{self.userinfo.score_type}_Rank_{rankPic[chartInfo.scoreId]}.png').convert('RGBA')
+        if self.userinfo.score_type == 'TTR':
+            rankImg = self._resizePic(rankImg, 0.4)
+        elif self.userinfo.score_type == 'GAM':
+            rankImg = self._resizePic(rankImg, 1)
         temp.paste(rankImg, (self.itemsize[0]-rankImg.size[0]-20, self.itemsize[1]*2//4 ), rankImg.split()[3])
 
         if chartInfo.comboId != 0:
@@ -190,8 +194,8 @@ class DrawBest:
         namePlateDraw = ImageDraw.Draw(namePlateImg)
         FontName = plugin_config.plugin_dir+'/static/font/msyh.ttc'
         font = ImageFont.truetype(FontName, 36, encoding='utf-8')
-        # logger.debug(self.username)
-        namePlateDraw.text((12, 5), self.username, 'black', font)
+        # logger.debug(self.name)
+        namePlateDraw.text((12, 5), self.name, 'black', font)
         img.paste(namePlateImg, (200, 50), namePlateImg.split()[3])
 
         shougouImg = Image.open(self.pic_dir + 'UI_CMN_Shougou_Rainbow.png').convert('RGBA')
@@ -225,6 +229,7 @@ class DrawBest:
 
 
     def getDir(self):
+        self.userinfo.save_user()
         return self.img.convert('RGB')
 
 
@@ -245,8 +250,16 @@ async def generate50(payload:Dict, name:str):
         sd_best.push_ra(ChartInfo.from_b50json(c))
     for c in dx:
         dx_best.push_ra(ChartInfo.from_b50json(c))
-    
-    pic = DrawBest(sd_best, dx_best, name).getDir()
+
+
+    username:str = obj["username"]
+    # pic = DrawBest(sd_best, dx_best, name, username).getDir()
+
+    drawbest = DrawBest(sd_best, dx_best, name, username)
+    if 'qq' in payload:
+        drawbest.userinfo.set_qq(payload['qq'])
+
+    pic = drawbest.getDir()
 
     output = BytesIO()
     pic.save(output, format='PNG')
